@@ -1,4 +1,4 @@
-##当前版本环境变量需要自己设置，工具只修改JAVA_HOME
+当前版本环境变量需要自己设置，工具只修改JAVA_HOME
 
 设置中填写JAVA_HOME 的路径
 ![image](https://github.com/user-attachments/assets/dad87fcb-8b14-474c-b178-6c8e10bc0314)
