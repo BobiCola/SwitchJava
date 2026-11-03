@@ -1,225 +1,138 @@
 package smg.switchjava;
 
 import javafx.application.Application;
+import javafx.beans.binding.Bindings;
+import javafx.collections.*;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.image.Image;
 import javafx.scene.layout.*;
-import javafx.stage.Modality;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
-
-import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.file.*;
+import java.util.*;
 
 public class SwitchJavaApplication extends Application {
+    private final ObservableList<JdkProfile> profiles = FXCollections.observableArrayList();
+    private final ProfileStore store = new ProfileStore(Path.of(System.getProperty("user.home"), ".switchjava", "profiles.properties"));
+    private final ListView<JdkProfile> list = new ListView<>(profiles);
+    private final TextArea output = new TextArea();
+    private Stage stage;
+    private boolean busy;
 
-    private List<String> names = new ArrayList<>();
-    private List<String> paths = new ArrayList<>();
-    private ChoiceBox<String> choiceBox;
-    private TextArea outputArea; // 添加输出区域
-
-    @Override
-    public void start(Stage primaryStage) {
-        // 从文件加载设置
-        loadSettings();
-
-        // 主界面布局
-        VBox root = new VBox(10);
-        root.setPadding(new Insets(10));
-
-        // ChoiceBox
-        choiceBox = new ChoiceBox<>();
-        choiceBox.getItems().addAll(names); // 加载名称到 ChoiceBox
-        choiceBox.setValue("选择名称"); // 默认值
-
-        // 让 ChoiceBox 宽度适应窗口
-        choiceBox.setMaxWidth(Double.MAX_VALUE);
-        choiceBox.setMinHeight(30);
-
-        // 按钮
-        Button button1 = new Button("设置");
-        Button button2 = new Button("切换");
-        Button button3 = new Button("删除"); // 添加删除按钮
-
-        // 让按钮宽度匹配窗口
-        button1.setMinWidth(81);
-        button1.setMinHeight(30);
-        button2.setMinWidth(81);
-        button2.setMinHeight(30);
-        button3.setMinWidth(81);
-        button3.setMinHeight(30);
-
-        // 按钮区域布局
-        HBox buttonBox = new HBox(10, button2, button1, button3); // 将删除按钮加入按钮区域
-        buttonBox.setSpacing(10);
-
-        // 按钮事件
-        button1.setOnAction(e -> openSettingsWindow());
-        button2.setOnAction(e -> switchAction());
-        button3.setOnAction(e -> deleteSelectedItem()); // 删除按钮事件
-
-        // 输出区域
-        outputArea = new TextArea();
-        outputArea.setMinHeight(215);
-        outputArea.setEditable(false); // 设置为只读
-        outputArea.setPrefHeight(100); // 设置高度
-
-        // 将控件加入主界面
-        root.getChildren().addAll(choiceBox, buttonBox, outputArea); // 添加输出区域到布局
-
-        // 设置主场景
-        Scene scene = new Scene(root, 300, 350); // 窗口大小
-        primaryStage.setTitle("Switch Java");
-        primaryStage.setScene(scene);
-        primaryStage.getIcons().add(new Image(getClass().getResourceAsStream("/image/switch_d.png")));
-
-        // 固定窗口大小并去除最大化按钮
-        primaryStage.setResizable(false); // 禁止调整窗口大小
-        primaryStage.setWidth(300); // 设置窗口宽度
-        primaryStage.setHeight(350); // 设置窗口高度
-
-        // 重定向 System.out 到 outputArea
-        redirectSystemOut();
-
-        primaryStage.show();
-    }
-
-    private void redirectSystemOut() {
-        PrintStream printStream = new PrintStream(new OutputStream() {
-            @Override
-            public void write(int b) {
-                // 将字节转换为字符并添加到输出区域，使用 UTF-8 编码
-                outputArea.appendText(String.valueOf((char) b));
-                outputArea.setScrollTop(Double.MAX_VALUE); // 滚动到最底部
-            }
-
-            @Override
-            public void write(byte[] b, int off, int len) {
-                // 将字节数组转换为字符串并添加到输出区域
-                String str = new String(b, off, len);
-                outputArea.appendText(str);
-                outputArea.setScrollTop(Double.MAX_VALUE); // 滚动到最底部
+    @Override public void start(Stage stage) {
+        this.stage = stage;
+        Button add = new Button("+ 添加 JDK"); add.getStyleClass().add("primary");
+        add.setOnAction(e -> addProfile());
+        Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox header = new HBox(16, label("SJ / SwitchJava", "brand"), spacer, add);
+        Label count = label("", "section-label");
+        count.textProperty().bind(Bindings.size(profiles).asString("本地版本 / %d"));
+        list.setPlaceholder(new Label("还没有 JDK\n点击右上角添加第一个版本"));
+        list.setCellFactory(view -> new ListCell<>() {
+            @Override protected void updateItem(JdkProfile item, boolean empty) {
+                super.updateItem(item, empty); setText(null);
+                if (empty || item == null) { setGraphic(null); return; }
+                Label home = label(item.home(), "muted"); home.setMaxWidth(230);
+                Label name = label(item.name(), "profile-name"); name.setMaxWidth(230);
+                setGraphic(new VBox(6, name, home));
             }
         });
-        System.setOut(printStream); // 重定向 System.out
-        System.setErr(printStream); // 也重定向 System.err
-    }
-
-    private void openSettingsWindow() {
-        // 创建弹出窗口
-        Stage dialog = new Stage();
-        dialog.initModality(Modality.APPLICATION_MODAL);
-        dialog.setTitle("设置");
-
-        // 布局
-        VBox dialogVbox = new VBox(10);
-        dialogVbox.setPadding(new Insets(10));
-
-        // 输入字段
-        TextField nameField = new TextField();
-        nameField.setPromptText("请输入名称");
-
-        TextField pathField = new TextField();
-        pathField.setPromptText("请输入路径");
-
-        // 确认按钮
-        Button saveButton = new Button("保存");
-        saveButton.setMaxWidth(Double.MAX_VALUE);
-
-        saveButton.setOnAction(e -> {
-            String name = nameField.getText();
-            String path = pathField.getText();
-            if (!name.isEmpty() && !path.isEmpty()) {
-                names.add(name);
-                paths.add(path);
-                choiceBox.getItems().add(name); // 更新 ChoiceBox
-                saveSettings(); // 保存到文件
-                nameField.clear(); // 清空输入框
-                pathField.clear(); // 清空输入框
-                dialog.close();
-                System.out.println("已添加: " + name); // 输出到输出区域
-            } else {
-                // 提示用户输入不完整
-                Alert alert = new Alert(Alert.AlertType.WARNING, "名称和路径不能为空！");
-                alert.showAndWait();
+        VBox versions = new VBox(12, count, list); versions.getStyleClass().add("card");
+        versions.setPrefWidth(300); versions.setMinWidth(260); versions.setMaxWidth(300); VBox.setVgrow(list, Priority.ALWAYS);
+        Label selected = label("选择一个 JDK", "detail-title");
+        Label path = label("从左侧选择版本，或添加新的本地 JDK。", "muted"); path.setWrapText(true);
+        Label current = label("启动时 JAVA_HOME\n" + System.getenv().getOrDefault("JAVA_HOME", "未设置"), "environment"); current.setWrapText(true);
+        CheckBox system = new CheckBox("写入系统变量（需要管理员权限）");
+        Label hint = label(JavaHomeService.isWindows() ? "默认写入用户变量，不修改 PATH。请检查用户/系统变量及 PATH 的优先级。" : "当前平台仅支持配置管理；写入 JAVA_HOME 需要 Windows。", "muted"); hint.setWrapText(true);
+        Button apply = new Button("切换到此版本"); apply.getStyleClass().add("primary");
+        Button delete = new Button("删除配置"); delete.getStyleClass().add("danger");
+        apply.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
+        delete.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
+        HBox actions = new HBox(10, apply, delete);
+        apply.setOnAction(e -> {
+            JdkProfile profile = list.getSelectionModel().getSelectedItem();
+            boolean scope = system.isSelected();
+            Task<String> task = new Task<>() {
+                @Override protected String call() throws Exception { return new JavaHomeService().switchTo(profile, scope); }
+            };
+            busy = true; list.setDisable(true); add.setDisable(true); system.setDisable(true); actions.setDisable(true);
+            output.setText("正在写入 JAVA_HOME…");
+            Runnable finish = () -> { busy = false; list.setDisable(false); add.setDisable(false); system.setDisable(false); actions.setDisable(false); };
+            task.setOnSucceeded(event -> { output.setText(task.getValue()); finish.run(); });
+            task.setOnFailed(event -> { output.setText("未确认切换成功：\n" + task.getException().getMessage()); finish.run(); });
+            Thread worker = new Thread(task, "java-home-switch"); worker.setDaemon(true); worker.start();
+        });
+        delete.setOnAction(e -> {
+            JdkProfile profile = list.getSelectionModel().getSelectedItem();
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "仅删除配置，不删除磁盘上的 JDK：" + profile.name(), ButtonType.CANCEL, ButtonType.OK);
+            confirm.initOwner(stage);
+            if (confirm.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) {
+                List<JdkProfile> next = new ArrayList<>(profiles); next.remove(profile); persist(next);
             }
         });
-
-        // 将控件加入布局
-        dialogVbox.getChildren().addAll(new Label("Name:"), nameField, new Label("Path:"), pathField, saveButton);
-
-        // 设置弹出窗口场景
-        Scene dialogScene = new Scene(dialogVbox, 300, 200); // 窗口大小
-        dialog.setScene(dialogScene);
-        dialog.show();
-    }
-
-    private void switchAction() {
-        outputArea.clear();
-        int selectedIndex = choiceBox.getSelectionModel().getSelectedIndex();
-        if (selectedIndex >= 0) {
-            String selectedPath = paths.get(selectedIndex);
-            System.out.println("切换到路径: " + selectedPath);
-            util.setJavaHome(selectedPath); // 假设这是您设置JAVA_HOME的逻辑
-        } else {
-            // 提示用户没有选择
-            Alert alert = new Alert(Alert.AlertType.WARNING, "请先选择一个版本！");
-            alert.showAndWait();
-        }
-    }
-
-    private void deleteSelectedItem() {
-        int selectedIndex = choiceBox.getSelectionModel().getSelectedIndex();
-        if (selectedIndex >= 0) {
-            String item = choiceBox.getSelectionModel().getSelectedItem();
-            // 从列表中删除
-            names.remove(selectedIndex);
-            paths.remove(selectedIndex);
-
-            choiceBox.getItems().remove(selectedIndex); // 更新 ChoiceBox
-            saveSettings(); // 保存到文件
-            System.out.println("已删除选中的项: " + item );
-        } else {
-            // 提示用户没有选择
-            Alert alert = new Alert(Alert.AlertType.WARNING, "请先选择一个版本！");
-            alert.showAndWait();
-        }
-    }
-
-    private void loadSettings() {
-        // 从用户的主目录加载 settings.txt 文件
-        File file = new File(System.getProperty("user.home"), "settings.txt");
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                String[] parts = line.split(",");
-                if (parts.length == 2) {
-                    names.add(parts[0]);
-                    paths.add(parts[1]);
-                }
+        list.getSelectionModel().selectedItemProperty().addListener((obs, old, profile) -> {
+            selected.setText(profile == null ? "选择一个 JDK" : profile.name());
+            path.setText(profile == null ? "从左侧选择版本，或添加新的本地 JDK。" : profile.home());
+        });
+        output.setEditable(false); output.setWrapText(true); output.setPrefRowCount(5);
+        output.setText("准备就绪。添加 JDK 后即可切换。\n切换后请重新打开终端，并运行 java -version 核实实际版本。");
+        VBox details = new VBox(18, label("VERSION CONTROL", "section-label"), selected, path, current, system, hint, actions, new Label("操作记录"), output);
+        details.getStyleClass().add("card"); details.setMinWidth(0); VBox.setVgrow(output, Priority.ALWAYS); HBox.setHgrow(details, Priority.ALWAYS);
+        HBox body = new HBox(20, versions, details); VBox.setVgrow(body, Priority.ALWAYS);
+        VBox root = new VBox(20, header, new VBox(8, label("你的 Java 工作空间", "title"), label("管理本地 JDK，让版本切换更清晰、更可靠。", "muted")), body);
+        root.setPadding(new Insets(28));
+        Scene scene = new Scene(root, 960, 680); scene.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
+        stage.setTitle("SwitchJava · JDK Manager"); stage.setScene(scene); stage.setMinWidth(850); stage.setMinHeight(640);
+        stage.setOnCloseRequest(e -> { if (busy) e.consume(); }); stage.show();
+        try {
+            profiles.setAll(store.load()); list.getSelectionModel().selectFirst();
+            Path legacy = Path.of(System.getProperty("user.home"), "settings.txt");
+            if (profiles.isEmpty() && Files.isRegularFile(legacy)) {
+                Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "发现旧版 ~/settings.txt，是否导入？原文件不会修改。", ButtonType.CANCEL, ButtonType.OK);
+                confirm.initOwner(stage);
+                if (confirm.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) persist(store.readLegacy(legacy));
             }
-            System.out.println("设置已从: " + file.getAbsolutePath() + " 加载"); // 输出加载路径
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            add.setDisable(true);
+            output.setText("配置读取失败，为防止覆盖已禁止添加。请备份并修复配置后重启：\n" + e.getMessage());
         }
     }
 
-    private void saveSettings() {
-        // 假设您将文件保存到用户的主目录
-        File file = new File(System.getProperty("user.home"), "settings.txt");
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
-            for (int i = 0; i < names.size(); i++) {
-                bw.write(names.get(i) + "," + paths.get(i));
-                bw.newLine();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    private Label label(String text, String style) {
+        Label label = new Label(text); label.getStyleClass().add(style); return label;
     }
 
-    public static void main(String[] args) {
-        launch(args);
+    private void addProfile() {
+        Dialog<Void> dialog = new Dialog<>(); dialog.initOwner(stage); dialog.setTitle("添加本地 JDK");
+        TextField name = new TextField(); name.setPromptText("例如：Temurin 21 / 项目名称");
+        TextField path = new TextField(); path.setPromptText("JDK 根目录（不是 bin 目录）");
+        Button browse = new Button("浏览…");
+        browse.setOnAction(e -> {
+            DirectoryChooser chooser = new DirectoryChooser(); chooser.setTitle("选择 JDK 根目录");
+            var folder = chooser.showDialog(stage);
+            if (folder != null) { path.setText(folder.getAbsolutePath()); if (name.getText().isBlank()) name.setText(folder.getName()); }
+        });
+        Label error = label("", "error"); error.setWrapText(true);
+        VBox content = new VBox(10, new Label("版本名称"), name, new Label("安装路径"), path, browse, error); content.setPrefWidth(450);
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL, ButtonType.OK);
+        dialog.getDialogPane().lookupButton(ButtonType.OK).addEventFilter(javafx.event.ActionEvent.ACTION, event -> {
+            try {
+                JdkProfile profile = new JdkProfile(name.getText(), path.getText()); profile.validate();
+                if (profiles.stream().anyMatch(p -> p.name().equalsIgnoreCase(profile.name()) || p.home().equalsIgnoreCase(profile.home()))) throw new IllegalArgumentException("此名称或路径已存在");
+                List<JdkProfile> next = new ArrayList<>(profiles); next.add(profile);
+                store.save(next); profiles.setAll(next); list.getSelectionModel().select(profile); output.setText("已添加：" + profile.name());
+            } catch (Exception e) { error.setText(e.getMessage()); event.consume(); }
+        });
+        dialog.showAndWait();
     }
+
+    private void persist(List<JdkProfile> next) {
+        try { store.save(next); profiles.setAll(next); list.getSelectionModel().selectFirst(); output.setText("配置已保存。"); }
+        catch (Exception e) { output.setText("保存失败，保留原配置：" + e.getMessage()); }
+    }
+
+    public static void main(String[] args) { launch(args); }
 }
