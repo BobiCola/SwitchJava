@@ -2,6 +2,16 @@
 
 一个轻量的 JavaFX 桌面 JDK 管理器。集中保存本地 JDK，在 Windows 上按需写入用户或系统 `JAVA_HOME`。
 
+## 下载发行版
+
+从 [最新发行版](https://github.com/BobiCola/SwitchJava/releases/latest) 下载 `SwitchJava-1.1.0-windows.jar`（Windows x64，需要 Java 17+，内含 JavaFX，不含 Java 运行时），运行：
+
+```powershell
+java -jar SwitchJava-1.1.0-windows.jar
+```
+
+校验值见发行附件 `SHA256SUMS.txt`。源码 ZIP 不是应用发行包。旧版保留，不覆盖旧标签。
+
 ## 功能
 
 - **清晰的双栏界面**：版本列表、安装路径、启动时环境变量和操作结果集中展示，可调整窗口大小。
@@ -105,3 +115,5 @@ src/test/java/smg/switchjava/ProfileStoreTest.java
 - 切换期间界面不冻结，不能同时删除配置或重复切换。
 
 当前不提供自动下载 JDK、自动修改 PATH、跨平台 shell 配置修改或独立 EXE 安装包。
+
+Windows 发行包可通过 `mvn -Pwindows-release clean verify` 重建，产物为 `target/SwitchJava-1.1.0-windows.jar`。发行工作流在 Windows 上执行打包 JAR 的界面启动测试，通过后才发布附件。
